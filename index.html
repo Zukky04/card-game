@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>神経衰弱ゲーム</title>
+  <!-- jQuery CDN -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    /* ゲーム盤全体のスタイル */
+    #game-board {
+      display: flex;
+      flex-wrap: wrap;
+      width: 520px;
+      margin: 20px auto;
+    }
+    /* カードの基本スタイル */
+    .card {
+      width: 100px;
+      height: 150px;
+      margin: 10px;
+      background-color: #333;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 48px;
+      text-align: center;
+      line-height: 150px;
+      user-select: none;
+      /* 裏面は文字を見せない */
+      color: transparent;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    /* 表向きorマッチしたカードのスタイル */
+    .card.flipped,
+    .card.matched {
+      background-color: #fff;
+      color: #333;
+      cursor: default;
+      border: 2px solid #333;
+    }
+    /* スコア・タイマー・メッセージの表示 */
+    #score, #timer, #message {
+      text-align: center;
+      font-size: 24px;
+      margin-top: 10px;
+    }
+    #message {
+      font-size: 28px;
+      margin-top: 20px;
+    }
+    /* スタートボタン */
+    #start-btn {
+      display: block;
+      margin: 20px auto;
+      font-size: 20px;
+      padding: 10px 20px;
+    }
+  </style>
+</head>
+<body>
+  <button id="start-btn">ゲームスタート</button>
+  <div id="score">スコア: 0</div>
+  <div id="timer">タイム: 0秒</div>
+  <div id="game-board"></div>
+  <div id="message"></div>
+  
+  <script>
+    $(document).ready(function() {
+      var totalPairs = 5;        // 合計ペア数（10枚カード）
+      var cardValues = [];       // カードに設定する値の配列
+      var firstCard = null;      // 現在めくった1枚目のカード
+      var secondCard = null;     // 現在めくった2枚目のカード
+      var canClick = true;       // クリック操作を許可するかどうか
+      var score = 0;             // 現在のスコア
+      var pairsFound = 0;        // マッチしたペア数
+      var timer;                 // タイマー用の interval ID
+      var startTime;             // ゲーム開始時刻
+      
+      // 配列をシャッフルする関数（Fisher-Yatesアルゴリズム）
+      function shuffle(array) {
+        for (var i = array.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var temp = array[i];
+          array[i] = array[j];
+          array[j] = temp;
+        }
+        return array;
+      }
+      
+      // ゲーム盤を初期化する関数
+      function initGame() {
+        $("#message").text("");
+        score = 0;
+        pairsFound = 0;
+        $("#score").text("スコア: " + score);
+        $("#timer").text("タイム: 0秒");
+        $("#game-board").empty();
+        firstCard = null;
+        secondCard = null;
+        canClick = true;
+        
+        // カードの値をセット（1～5の各2枚）
+        cardValues = [];
+        for (var i = 1; i <= totalPairs; i++) {
+          cardValues.push(i);
+          cardValues.push(i);
+        }
+        cardValues = shuffle(cardValues);
+        
+        // カード要素を生成し、値は内部テキストとして設定（非表示状態はCSSでcolor: transparent）
+        for (var i = 0; i < cardValues.length; i++) {
+          var card = $("<div class='card' data-value='" + cardValues[i] + "'>" + cardValues[i] + "</div>");
+          $("#game-board").append(card);
+        }
+        
+        // タイマー開始
+        startTime = new Date();
+        if (timer) { clearInterval(timer); }
+        timer = setInterval(function() {
+          var elapsed = Math.floor((new Date() - startTime) / 1000);
+          $("#timer").text("タイム: " + elapsed + "秒");
+        }, 1000);
+      }
+      
+      // カードクリック時の処理
+      function cardClick() {
+        if (!canClick) return;
+        // すでに表向きまたはマッチ済みなら何もしない
+        if ($(this).hasClass("flipped") || $(this).hasClass("matched")) return;
+        
+        // toggleClass()で表裏を切り替える
+        $(this).toggleClass("flipped");
+        
+        if (!firstCard) {
+          firstCard = $(this);
+        } else {
+          secondCard = $(this);
+          canClick = false;
+          
+          // 2枚のカードの値が一致しているかチェック
+          if (firstCard.data("value") === secondCard.data("value")) {
+            // マッチしたら「matched」クラスを追加（以降クリック不可）
+            firstCard.addClass("matched");
+            secondCard.addClass("matched");
+            score += 5;
+            pairsFound++;
+            $("#score").text("スコア: " + score);
+            // 少し待ってから次の操作へ
+            setTimeout(function() {
+              firstCard = null;
+              secondCard = null;
+              canClick = true;
+              // 全ペアが揃ったらゲームクリア
+              if (pairsFound === totalPairs) {
+                clearInterval(timer);
+                var totalTime = Math.floor((new Date() - startTime) / 1000);
+                $("#message").text("ゲームクリア！タイム: " + totalTime + "秒");
+              }
+            }, 500);
+          } else {
+            // マッチしなければ、一定時間後にカードを裏返す
+            setTimeout(function() {
+              firstCard.toggleClass("flipped");
+              secondCard.toggleClass("flipped");
+              firstCard = null;
+              secondCard = null;
+              canClick = true;
+            }, 1000);
+          }
+        }
+      }
+      
+      // 動的に生成されたカードにクリックイベントを設定（イベントデリゲーション）
+      $("#game-board").on("click", ".card", cardClick);
+      
+      // スタートボタンのクリックでゲーム初期化
+      $("#start-btn").click(function() {
+        initGame();
+      });
+    });
+  </script>
+</body>
+</html>
